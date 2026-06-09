@@ -164,7 +164,7 @@
         
         .indicator { font-size: 11px; font-weight: normal; color: #64748b; margin-left: 5px; }
 
-        /* 게임 복수 선택 (체크박스 드롭다운) */
+        /* 복수 선택 (체크박스 드롭다운) */
         .multiselect { position: relative; }
         .ms-toggle {
             width: 100%; padding: 8px; border: 1px solid var(--border-color);
@@ -213,29 +213,43 @@
         <div class="card">
             <div class="filter-grid">
                 <div class="filter-group">
-                    <label>지역 선택</label>
-                    <select id="filter-region" onchange="applyFilters()">
-                        <option value="ALL">전체 지역</option>
-                    </select>
+                    <label>지역 선택 (복수 가능)</label>
+                    <div class="multiselect" id="region-multiselect">
+                        <button type="button" class="ms-toggle" id="region-ms-toggle" onclick="togglePanel('region', event)">전체 지역 ▾</button>
+                        <div class="ms-panel" id="region-ms-panel">
+                            <div class="ms-actions">
+                                <button type="button" onclick="setAll('region', true)">전체 선택</button>
+                                <button type="button" onclick="setAll('region', false)">전체 해제</button>
+                            </div>
+                            <div class="ms-options" id="region-ms-options"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="filter-group">
                     <label>게임 선택 (복수 가능)</label>
                     <div class="multiselect" id="game-multiselect">
-                        <button type="button" class="ms-toggle" id="game-ms-toggle" onclick="toggleGamePanel(event)">전체 게임 ▾</button>
+                        <button type="button" class="ms-toggle" id="game-ms-toggle" onclick="togglePanel('game', event)">전체 게임 ▾</button>
                         <div class="ms-panel" id="game-ms-panel">
                             <div class="ms-actions">
-                                <button type="button" onclick="setAllGames(true)">전체 선택</button>
-                                <button type="button" onclick="setAllGames(false)">전체 해제</button>
+                                <button type="button" onclick="setAll('game', true)">전체 선택</button>
+                                <button type="button" onclick="setAll('game', false)">전체 해제</button>
                             </div>
                             <div class="ms-options" id="game-ms-options"></div>
                         </div>
                     </div>
                 </div>
                 <div class="filter-group">
-                    <label>기간 선택 <span title="요약 차트/표에는 영향을 주지 않습니다." style="cursor:help">ⓘ</span></label>
-                    <select id="filter-month" onchange="applyFilters()">
-                        <option value="ALL">전체 기간</option>
-                    </select>
+                    <label>기간 선택 (복수 가능) <span title="요약 차트/표에는 영향을 주지 않습니다." style="cursor:help">ⓘ</span></label>
+                    <div class="multiselect" id="month-multiselect">
+                        <button type="button" class="ms-toggle" id="month-ms-toggle" onclick="togglePanel('month', event)">전체 기간 ▾</button>
+                        <div class="ms-panel" id="month-ms-panel">
+                            <div class="ms-actions">
+                                <button type="button" onclick="setAll('month', true)">전체 선택</button>
+                                <button type="button" onclick="setAll('month', false)">전체 해제</button>
+                            </div>
+                            <div class="ms-options" id="month-ms-options"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="filter-group">
                     <label>선그래프 지표 (월간 추이용)</label>
@@ -1502,16 +1516,10 @@
     function loadEmbeddedData() {
         const sumText = document.getElementById('embedded-summary-csv').textContent.trim();
         const monText = document.getElementById('embedded-monthly-csv').textContent.trim();
-
-        const sumRes = Papa.parse(sumText, { header: true, skipEmptyLines: true });
-        const monRes = Papa.parse(monText, { header: true, skipEmptyLines: true });
-
-        rawSummaryData = sumRes.data;
-        rawMonthlyData = monRes.data;
-
+        rawSummaryData = Papa.parse(sumText, { header: true, skipEmptyLines: true }).data;
+        rawMonthlyData = Papa.parse(monText, { header: true, skipEmptyLines: true }).data;
         initDashboard();
     }
-
     document.addEventListener('DOMContentLoaded', loadEmbeddedData);
 
     // 대시보드 초기화 (최초 1회)
@@ -1538,33 +1546,25 @@
             if(d.standard_name_ko) games.add(d.standard_name_ko);
         });
 
-        populateSelect('filter-region', Array.from(regions).sort());
-        populateGameCheckboxes(Array.from(games).sort());
-        populateSelect('filter-month', Array.from(months).sort());
+        populateCheckboxes('region', Array.from(regions).sort());
+        populateCheckboxes('game', Array.from(games).sort());
+        populateCheckboxes('month', Array.from(months).sort());
 
         applyFilters(); // 필터 적용 및 렌더링
     }
 
-    function populateSelect(id, values) {
-        const select = document.getElementById(id);
-        values.forEach(val => {
-            let opt = document.createElement('option');
-            opt.value = val;
-            opt.innerText = val;
-            select.appendChild(opt);
-        });
-    }
+    // ===== 복수 선택(체크박스) 공통 로직 =====
+    const MS_ALLTEXT = { region: '전체 지역', game: '전체 게임', month: '전체 기간' };
 
-    // 게임 복수 선택 (체크박스) 관련 함수들
-    function populateGameCheckboxes(values) {
-        const box = document.getElementById('game-ms-options');
+    function populateCheckboxes(key, values) {
+        const box = document.getElementById(key + '-ms-options');
         box.innerHTML = '';
         values.forEach(val => {
             const label = document.createElement('label');
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = val;
-            cb.className = 'game-cb';
+            cb.className = key + '-cb';
             cb.addEventListener('change', applyFilters);
             const span = document.createElement('span');
             span.innerText = val;
@@ -1574,72 +1574,70 @@
         });
     }
 
-    // 선택된 게임 배열 반환 (빈 배열이면 '전체'로 간주)
-    function getSelectedGames() {
-        return Array.from(document.querySelectorAll('.game-cb:checked')).map(cb => cb.value);
+    // 선택된 값 배열 (빈 배열이면 '전체'로 간주)
+    function getSelected(key) {
+        return Array.from(document.querySelectorAll('.' + key + '-cb:checked')).map(cb => cb.value);
     }
 
-    function updateGameToggleLabel() {
-        const sel = getSelectedGames();
-        const btn = document.getElementById('game-ms-toggle');
-        if(sel.length === 0) btn.innerText = '전체 게임 ▾';
+    function updateToggleLabel(key) {
+        const sel = getSelected(key);
+        const btn = document.getElementById(key + '-ms-toggle');
+        if(sel.length === 0) btn.innerText = MS_ALLTEXT[key] + ' ▾';
         else if(sel.length === 1) btn.innerText = sel[0] + ' ▾';
         else btn.innerText = sel.length + '개 선택됨 ▾';
     }
 
-    function toggleGamePanel(e) {
+    function togglePanel(key, e) {
         e.stopPropagation();
-        document.getElementById('game-ms-panel').classList.toggle('open');
+        document.querySelectorAll('.ms-panel').forEach(p => {
+            if(p.id !== key + '-ms-panel') p.classList.remove('open');
+        });
+        document.getElementById(key + '-ms-panel').classList.toggle('open');
     }
 
-    function setAllGames(state) {
-        document.querySelectorAll('.game-cb').forEach(cb => cb.checked = state);
+    function setAll(key, state) {
+        document.querySelectorAll('.' + key + '-cb').forEach(cb => cb.checked = state);
         applyFilters();
     }
 
-    // 패널 바깥 클릭 시 닫기
+    // 패널 바깥 클릭 시 모두 닫기
     document.addEventListener('click', function(e) {
-        const ms = document.getElementById('game-multiselect');
-        if(ms && !ms.contains(e.target)) {
-            document.getElementById('game-ms-panel').classList.remove('open');
-        }
+        document.querySelectorAll('.multiselect').forEach(ms => {
+            if(!ms.contains(e.target)) ms.querySelector('.ms-panel').classList.remove('open');
+        });
     });
 
     function resetFilters() {
-        document.getElementById('filter-region').value = 'ALL';
-        document.querySelectorAll('.game-cb').forEach(cb => cb.checked = false);
-        document.getElementById('filter-month').value = 'ALL';
+        document.querySelectorAll('.region-cb, .game-cb, .month-cb').forEach(cb => cb.checked = false);
         document.getElementById('filter-metric').value = 'Revenue ($)';
         applyFilters();
     }
 
     // 전역 필터 적용 함수
     function applyFilters() {
-        const selReg = document.getElementById('filter-region').value;
-        const selGames = getSelectedGames();          // 빈 배열이면 전체 게임
-        const gameSet = new Set(selGames);
-        const allGames = selGames.length === 0;
-        const selMon = document.getElementById('filter-month').value;
+        const selRegs = getSelected('region'); const regSet = new Set(selRegs); const allRegs = selRegs.length === 0;
+        const selGames = getSelected('game'); const gameSet = new Set(selGames); const allGames = selGames.length === 0;
+        const selMons = getSelected('month'); const monSet = new Set(selMons); const allMons = selMons.length === 0;
         const selMetric = document.getElementById('filter-metric').value;
 
-        updateGameToggleLabel();
+        updateToggleLabel('region'); updateToggleLabel('game'); updateToggleLabel('month');
 
         // 1. 요약 데이터 필터링 (기간 필터는 영향 없음)
         let filteredSummary = rawSummaryData.filter(d => {
-            if(selReg !== 'ALL' && d.region_code !== selReg) return false;
+            if(!allRegs && !regSet.has(d.region_code)) return false;
             if(!allGames && !gameSet.has(d.standard_name_ko)) return false;
             return true;
         });
 
         // 2. 월간 데이터 필터링
         let filteredMonthly = rawMonthlyData.filter(d => {
-            if(selReg !== 'ALL' && d.region_code !== selReg) return false;
+            if(!allRegs && !regSet.has(d.region_code)) return false;
             if(!allGames && !gameSet.has(d.standard_name_ko)) return false;
-            if(selMon !== 'ALL' && d.year_month !== selMon) return false;
+            if(!allMons && !monSet.has(d.year_month)) return false;
             return true;
         });
 
-        renderKPIs(filteredSummary, filteredMonthly, selReg, selGames, selMon);
+        renderKPIs(filteredSummary, filteredMonthly, selRegs, selGames, selMons);
         renderSummaryCharts(filteredSummary);
         renderTrendChart(filteredMonthly, selMetric);
         renderTables(filteredSummary, filteredMonthly);
@@ -1653,10 +1651,11 @@
     // KPI 렌더링
     // 요약 테이블 기준으로 계산합 (기간 필터가 ALL일때 정확)
     // 만약 기간 필터가 지정되었으면, 월간 테이블에서 합산
-    function renderKPIs(summary, monthly, selReg, selGame, selMon) {
+    function renderKPIs(summary, monthly, selRegs, selGames, selMons) {
         let tDl = 0, tRev = 0, uGames = new Set(), uRegs = new Set();
+        const allMons = selMons.length === 0;
 
-        if (selMon === 'ALL') {
+        if (allMons) {
              // 기간 미지정시 Summary 데이터 활용
             summary.forEach(d => {
                 let dl = safeNum(d.total_downloads);
@@ -1675,7 +1674,7 @@
                 if(d.standard_name_ko) uGames.add(d.standard_name_ko);
                 if(d.region_code) uRegs.add(d.region_code);
             });
-            document.querySelectorAll('.kpi-title .indicator').forEach(el => el.innerText = `(선택 월: ${selMon} 데이터 기준)`);
+            document.querySelectorAll('.kpi-title .indicator').forEach(el => el.innerText = `(선택 월: ${selMons.join(', ')} 데이터 기준)`);
         }
 
         let avgRpd = tDl > 0 ? (tRev / tDl) : 0;
