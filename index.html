@@ -163,6 +163,37 @@
         .notice { font-size: 12px; color: var(--text-sub); margin-top: 20px; text-align: center; }
         
         .indicator { font-size: 11px; font-weight: normal; color: #64748b; margin-left: 5px; }
+
+        /* 게임 복수 선택 (체크박스 드롭다운) */
+        .multiselect { position: relative; }
+        .ms-toggle {
+            width: 100%; padding: 8px; border: 1px solid var(--border-color);
+            border-radius: 4px; background-color: white; font-family: inherit;
+            font-size: 14px; text-align: left; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ms-panel {
+            display: none; position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid var(--border-color); border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15); margin-top: 4px;
+            max-height: 280px; overflow-y: auto;
+        }
+        .ms-panel.open { display: block; }
+        .ms-actions {
+            display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border-color);
+            position: sticky; top: 0; background: white;
+        }
+        .ms-actions button {
+            flex: 1; font-size: 12px; padding: 5px; border: 1px solid var(--border-color);
+            border-radius: 4px; background: var(--bg-header); cursor: pointer; font-family: inherit;
+        }
+        .ms-actions button:hover { filter: brightness(0.97); }
+        .ms-options label {
+            display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+            font-size: 13px; font-weight: 400; cursor: pointer; margin: 0;
+        }
+        .ms-options label:hover { background: #f1f5f9; }
+        .ms-options input { margin: 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -188,10 +219,17 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label>게임 선택</label>
-                    <select id="filter-game" onchange="applyFilters()">
-                        <option value="ALL">전체 게임</option>
-                    </select>
+                    <label>게임 선택 (복수 가능)</label>
+                    <div class="multiselect" id="game-multiselect">
+                        <button type="button" class="ms-toggle" id="game-ms-toggle" onclick="toggleGamePanel(event)">전체 게임 ▾</button>
+                        <div class="ms-panel" id="game-ms-panel">
+                            <div class="ms-actions">
+                                <button type="button" onclick="setAllGames(true)">전체 선택</button>
+                                <button type="button" onclick="setAllGames(false)">전체 해제</button>
+                            </div>
+                            <div class="ms-options" id="game-ms-options"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="filter-group">
                     <label>기간 선택 <span title="요약 차트/표에는 영향을 주지 않습니다." style="cursor:help">ⓘ</span></label>
@@ -1501,7 +1539,7 @@
         });
 
         populateSelect('filter-region', Array.from(regions).sort());
-        populateSelect('filter-game', Array.from(games).sort());
+        populateGameCheckboxes(Array.from(games).sort());
         populateSelect('filter-month', Array.from(months).sort());
 
         applyFilters(); // 필터 적용 및 렌더링
@@ -1517,9 +1555,59 @@
         });
     }
 
+    // 게임 복수 선택 (체크박스) 관련 함수들
+    function populateGameCheckboxes(values) {
+        const box = document.getElementById('game-ms-options');
+        box.innerHTML = '';
+        values.forEach(val => {
+            const label = document.createElement('label');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = val;
+            cb.className = 'game-cb';
+            cb.addEventListener('change', applyFilters);
+            const span = document.createElement('span');
+            span.innerText = val;
+            label.appendChild(cb);
+            label.appendChild(span);
+            box.appendChild(label);
+        });
+    }
+
+    // 선택된 게임 배열 반환 (빈 배열이면 '전체'로 간주)
+    function getSelectedGames() {
+        return Array.from(document.querySelectorAll('.game-cb:checked')).map(cb => cb.value);
+    }
+
+    function updateGameToggleLabel() {
+        const sel = getSelectedGames();
+        const btn = document.getElementById('game-ms-toggle');
+        if(sel.length === 0) btn.innerText = '전체 게임 ▾';
+        else if(sel.length === 1) btn.innerText = sel[0] + ' ▾';
+        else btn.innerText = sel.length + '개 선택됨 ▾';
+    }
+
+    function toggleGamePanel(e) {
+        e.stopPropagation();
+        document.getElementById('game-ms-panel').classList.toggle('open');
+    }
+
+    function setAllGames(state) {
+        document.querySelectorAll('.game-cb').forEach(cb => cb.checked = state);
+        applyFilters();
+    }
+
+    // 패널 바깥 클릭 시 닫기
+    document.addEventListener('click', function(e) {
+        const ms = document.getElementById('game-multiselect');
+        if(ms && !ms.contains(e.target)) {
+            document.getElementById('game-ms-panel').classList.remove('open');
+        }
+    });
+
     function resetFilters() {
         document.getElementById('filter-region').value = 'ALL';
-        document.getElementById('filter-game').value = 'ALL';
+        document.querySelectorAll('.game-cb').forEach(cb => cb.checked = false);
         document.getElementById('filter-month').value = 'ALL';
         document.getElementById('filter-metric').value = 'Revenue ($)';
         applyFilters();
@@ -1528,26 +1616,30 @@
     // 전역 필터 적용 함수
     function applyFilters() {
         const selReg = document.getElementById('filter-region').value;
-        const selGame = document.getElementById('filter-game').value;
+        const selGames = getSelectedGames();          // 빈 배열이면 전체 게임
+        const gameSet = new Set(selGames);
+        const allGames = selGames.length === 0;
         const selMon = document.getElementById('filter-month').value;
         const selMetric = document.getElementById('filter-metric').value;
+
+        updateGameToggleLabel();
 
         // 1. 요약 데이터 필터링 (기간 필터는 영향 없음)
         let filteredSummary = rawSummaryData.filter(d => {
             if(selReg !== 'ALL' && d.region_code !== selReg) return false;
-            if(selGame !== 'ALL' && d.standard_name_ko !== selGame) return false;
+            if(!allGames && !gameSet.has(d.standard_name_ko)) return false;
             return true;
         });
 
         // 2. 월간 데이터 필터링
         let filteredMonthly = rawMonthlyData.filter(d => {
             if(selReg !== 'ALL' && d.region_code !== selReg) return false;
-            if(selGame !== 'ALL' && d.standard_name_ko !== selGame) return false;
+            if(!allGames && !gameSet.has(d.standard_name_ko)) return false;
             if(selMon !== 'ALL' && d.year_month !== selMon) return false;
             return true;
         });
 
-        renderKPIs(filteredSummary, filteredMonthly, selReg, selGame, selMon);
+        renderKPIs(filteredSummary, filteredMonthly, selReg, selGames, selMon);
         renderSummaryCharts(filteredSummary);
         renderTrendChart(filteredMonthly, selMetric);
         renderTables(filteredSummary, filteredMonthly);
